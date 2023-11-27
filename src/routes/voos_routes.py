@@ -10,26 +10,14 @@ from src.models.voos_model import Voo
 voos_router = APIRouter(prefix="/voos")
 
 
-@voos_router.post("")
-def cria_voo(voo: Voo):
+@voos_router.get("/vendas")
+def get_voos_vendas():
     with get_session() as session:
-        LIMITE_HORAS = 5
+        LIMITE_HORAS = 2
         hora_atual = datetime.now()
         hora_limite = hora_atual + timedelta(hours=LIMITE_HORAS)
-        no_horario_limite = voo.data_saida <= hora_limite
-        print("horario_limite", no_horario_limite, hora_limite)
-        if no_horario_limite:
-            return JSONResponse(
-                content={
-                    "message": f"Impossível incluir vôos com menos de {LIMITE_HORAS} horas antes da saída"
-                },
-                status_code=403,
-            )
-
-        session.add(voo)
-        session.commit()
-        session.refresh(voo)
-        return voo
+        voos = session.query(Voo).filter(Voo.data_saida >= hora_limite).all()
+        return JSONResponse(content=voos)
 
 @voos_router.get("/vendas")
 def lista_voos_venda():
@@ -49,3 +37,43 @@ def lista_voos():
         return voo
 
 # TODO - Implementar rota que retorne as poltronas por id do voo
+
+@voos_router.post("/reservas")
+def cria_reserva(reserva: Reserva):
+    with get_session() as session:
+        voo = session.get(Voo, reserva.voo_id)
+        reservas = session.query(Reserva).filter(Reserva.documento == reserva.documento).all()
+        if reservas:
+            raise HTTPException(status_code=400, detail="Já existe uma reserva com este número de documento")
+        session.add(reserva)
+        session.commit()
+        session.refresh(reserva)
+        return reserva
+
+@voos_router.post("/reserva/:codigo_reserva/checkin/:num_poltrona")
+def faz_checkin(codigo_reserva: str, num_poltrona: str):
+    with get_session() as session:
+        reserva = session.get(Reserva, codigo_reserva)
+        if not reserva:
+            raise HTTPException(status_code=404, detail="Reserva não encontrada")
+        if reserva.poltrona != None:
+            raise HTTPException(status_code=400, detail="Poltrona já ocupada")
+        if reserva.voo.data_saida <= datetime.now():
+            raise HTTPException(status_code=400, detail="Voo já saiu")
+        reserva.poltrona = num_poltrona
+        session.commit()
+        return reserva
+
+@voos_router.patch("/reserva/:codigo_reserva/checkin/:num_poltrona")
+def faz_checkin(codigo_reserva: str, num_poltrona: str):
+    with get_session() as session:
+        reserva = session.get(Reserva, codigo_reserva)
+        if not reserva:
+            raise HTTPException(status_code=404, detail="Reserva não encontrada")
+        voo = session.get(Voo, reserva.voo_id)
+        poltronas_ocupadas = voo.poltronas.filter(Reserva.poltrona != None).all()
+        if num_poltrona in [poltrona.numero for poltrona in poltronas_ocupadas]:
+            raise HTTPException(status_code=400, detail="Poltrona já ocupada")
+        reserva.poltrona = num_poltrona
+        session.commit()
+        return reserva 

@@ -1,51 +1,51 @@
-import random
+from datetime import datetime, timedelta
 
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 from sqlmodel import select
 
 from src.config.database import get_session
-from src.models.reservas_model import Reserva
 from src.models.voos_model import Voo
 
-reservas_router = APIRouter(prefix="/reservas")
+voos_router = APIRouter(prefix="/voos")
 
 
-@reservas_router.get("/{id_voo}")
-def lista_reservas_voo(id_voo: int):
+@voos_router.post("")
+def cria_voo(voo: Voo):
     with get_session() as session:
-        statement = select(Reserva).where(Reserva.voo_id == id_voo)
-        reservas = session.exec(statement).all()
-        return reservas
-
-
-@reservas_router.post("")
-def cria_reserva(reserva: Reserva):
-    with get_session() as session:
-        voo = session.exec(select(Voo).where(Voo.id == reserva.voo_id)).first()
-
-        if not voo:
+        LIMITE_HORAS = 5
+        hora_atual = datetime.now()
+        hora_limite = hora_atual + timedelta(hours=LIMITE_HORAS)
+        no_horario_limite = voo.data_saida <= hora_limite
+        print("horario_limite", no_horario_limite, hora_limite)
+        if no_horario_limite:
             return JSONResponse(
-                content={"message": f"Voo com id {reserva.voo_id} não encontrado."},
-                status_code=404,
+                content={
+                    "message": f"Impossível incluir vôos com menos de {LIMITE_HORAS} horas antes da saída"
+                },
+                status_code=403,
             )
 
-        # TODO - Validar se existe uma reserva para o mesmo documento
-
-        codigo_reserva = "".join(
-            [str(random.randint(0, 999)).zfill(3) for _ in range(2)]
-        )
-
-        reserva.codigo_reserva = codigo_reserva
-        session.add(reserva)
+        session.add(voo)
         session.commit()
-        session.refresh(reserva)
-        return reserva
+        session.refresh(voo)
+        return voo
+
+@voos_router.get("/vendas")
+def lista_voos_venda():
+    LIMITE_HORAS = 2
+    with get_session() as session:
+        hora_limite = datetime.now() + timedelta(hours=LIMITE_HORAS)
+        statement = select(Voo).where(Voo.data_saida >= hora_limite)
+        voo = session.exec(statement).all()
+        return voo
 
 
-@reservas_router.post("/{codigo_reserva}/checkin/{num_poltrona}")
-def faz_checkin(codigo_reserva: str, num_poltrona: int):
-    # TODO - Implementar reserva de poltrona
-    pass
+@voos_router.get("")
+def lista_voos():
+    with get_session() as session:
+        statement = select(Voo)
+        voo = session.exec(statement).all()
+        return voo
 
-# TODO - Implementar troca de reserva de poltrona
+# TODO - Implementar rota que retorne as poltronas por id do voo
