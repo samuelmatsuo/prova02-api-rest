@@ -78,3 +78,4 @@ Sem corpo
 - PATCH http://localhost:8000/reserva/:codigo_reserva/checkin/:num_poltrona
 Sem corpo
 
+`Samuel Matsuo terminou aqui e não sabe se está totalmente funcional hehehehehe`
